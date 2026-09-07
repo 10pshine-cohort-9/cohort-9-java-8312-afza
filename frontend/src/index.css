@@ -3,6 +3,17 @@
 
 
 @layer utilities {
+  .field-icon {
+    position: absolute;
+    top: 50%;
+    left: 1rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    transform: translateY(-50%);
+    color: #3d5a80;
+    pointer-events: none;
+  }
+
   @keyframes fade-in-up {
     from {
       opacity: 0;

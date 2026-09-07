@@ -1,6 +1,6 @@
-import { Mail, Phone, Briefcase, Pencil, Trash2 } from "lucide-react";
+import { Mail, Phone, Briefcase, Eye, Pencil, Trash2 } from "lucide-react";
 
-function ContactCard({ contact, onEdit, onDelete, isDarkMode }) {
+function ContactCard({ contact, onView, onEdit, onDelete, isDarkMode }) {
   const getInitials = (firstName, lastName) => {
     const first = firstName?.charAt(0) || "";
     const last = lastName?.charAt(0) || "";
@@ -37,6 +37,7 @@ function ContactCard({ contact, onEdit, onDelete, isDarkMode }) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <button type="button" onClick={() => onView(contact)} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E0FBFC] text-[#16425B] focus:outline-none focus:ring-2 focus:ring-[#98C1D9]" aria-label={`View ${contact.firstName} ${contact.lastName || ""}`.trim()}><Eye className="h-4 w-4" /></button>
             <button
               type="button"
               onClick={() => onEdit(contact)}

@@ -9,17 +9,22 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.contactmanager.backend.entity.Contact;
 import com.contactmanager.backend.repository.ContactRepository;
+import com.contactmanager.backend.repository.UserRepository;
 
 @Service
 public class ContactService {
 
     private final ContactRepository contactRepository;
+    private final UserRepository userRepository;
 
-    public ContactService(ContactRepository contactRepository) {
+    public ContactService(ContactRepository contactRepository, UserRepository userRepository) {
         this.contactRepository = contactRepository;
+        this.userRepository = userRepository;
     }
 
-   public Contact saveContact(Contact contact) {
+   public Contact saveContact(Long userId, Contact contact) {
+
+    contact.setOwner(userRepository.getReferenceById(userId));
 
     contact.getEmailAddresses().forEach(email -> email.setContact(contact));
 
@@ -28,28 +33,28 @@ public class ContactService {
     return contactRepository.save(contact);
 }
 
-    public List<Contact> getAllContacts() {
-        return contactRepository.findAll();
+    public Page<Contact> getContacts(Long userId, String search, String title, Pageable pageable) {
+        return contactRepository.findContacts(userId, search.trim(), title.trim(), pageable);
     }
-    public Page<Contact> getContacts(String search, String title, Pageable pageable) {
-        return contactRepository.findContacts(search.trim(), title.trim(), pageable);
+    public Page<Contact> getContactsSortedByEmail(Long userId, String search, String title, Pageable pageable) {
+        return contactRepository.findContactsSortedByEmail(userId, search.trim(), title.trim(), pageable);
     }
-    public Page<Contact> getContactsSortedByEmail(String search, String title, Pageable pageable) {
-        return contactRepository.findContactsSortedByEmail(search.trim(), title.trim(), pageable);
+    public List<String> getContactTitles(Long userId) {
+        return contactRepository.findDistinctTitles(userId);
     }
-    public List<String> getContactTitles() {
-        return contactRepository.findDistinctTitles();
-    }
-    public Contact getContactById(Long id) {
-    return contactRepository.findById(id).orElse(null);
+    public Contact getContactById(Long userId, Long id) {
+    return contactRepository.findByIdAndOwnerId(id, userId).orElse(null);
 }
-public void deleteContact(Long id) {
-    contactRepository.deleteById(id);
+public boolean deleteContact(Long userId, Long id) {
+    Contact contact = getContactById(userId, id);
+    if (contact == null) return false;
+    contactRepository.delete(contact);
+    return true;
 }
 @Transactional
-public Contact updateContact(Long id, Contact updatedContact) {
+public Contact updateContact(Long userId, Long id, Contact updatedContact) {
 
-    Contact existing = contactRepository.findById(id).orElse(null);
+    Contact existing = contactRepository.findByIdAndOwnerId(id, userId).orElse(null);
 
     if (existing == null)
         return null;

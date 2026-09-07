@@ -3,11 +3,14 @@ import { Toaster, toast } from "react-hot-toast";
 import contactApi from "../api/contactApi";
 import ContactForm from "../components/ContactForm";
 import ContactList from "../components/ContactList";
+import ContactProfile from "../components/ContactProfile";
 import LoadingSpinner from "../components/LoadingSpinner";
 import EmptyState from "../components/EmptyState";
-import { Users, Plus, Moon, Sun, Trash2, X } from "lucide-react";
+import { Users, Plus, Moon, Sun, Trash2, X, CircleUserRound } from "lucide-react";
 
-function Home() {
+const requestTitles = () => contactApi.get("/contacts/titles");
+
+function Home({ onProfile }) {
   const [contacts, setContacts] = useState([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -22,11 +25,14 @@ function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [contactToDelete, setContactToDelete] = useState(null);
+  const [profileContact, setProfileContact] = useState(null);
+  const [profileState, setProfileState] = useState("idle");
+  const [profileError, setProfileError] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const formRef = useRef(null);
-  const loadContactsRef = useRef(null);
   const loadRequestId = useRef(0);
   const titleRequestId = useRef(0);
   const contactsVersion = useRef(0);
@@ -34,6 +40,10 @@ function Home() {
   const deleteDialogRef = useRef(null);
   const deleteDialogInitialFocusRef = useRef(null);
   const deleteTriggerRef = useRef(null);
+  const profileDialogRef = useRef(null);
+  const profileCloseRef = useRef(null);
+  const profileTriggerRef = useRef(null);
+  const profileRequestId = useRef(0);
   const editFormData = useMemo(
     () =>
       editingContact
@@ -41,21 +51,21 @@ function Home() {
             firstName: editingContact.firstName || "",
             lastName: editingContact.lastName || "",
             title: editingContact.title || "",
-            email: editingContact.emailAddresses?.[0]?.email || "",
-            phone: editingContact.phoneNumbers?.[0]?.phoneNumber || "",
+            emailAddresses: editingContact.emailAddresses || [],
+            phoneNumbers: editingContact.phoneNumbers || [],
           }
         : null,
     [editingContact],
   );
 
-  const loadContacts = useCallback(async () => {
+  const loadContacts = useCallback(async (requestedPage = page) => {
     const requestId = ++loadRequestId.current;
     const requestContactsVersion = contactsVersion.current;
     setLoading(true);
     try {
       const response = await contactApi.get("/contacts", {
         params: {
-          page,
+          page: requestedPage,
           size: 9,
           search: searchTerm.trim(),
           title: filterTitle,
@@ -71,11 +81,8 @@ function Home() {
         requestId === loadRequestId.current &&
         requestContactsVersion === contactsVersion.current
       ) {
-        if (
-          page > 0 &&
-          (response.data.totalPages === 0 || page >= response.data.totalPages)
-        ) {
-          setPage(Math.max(response.data.totalPages - 1, 0));
+        if (response.data.totalPages > 0 && requestedPage >= response.data.totalPages) {
+          setPage(response.data.totalPages - 1);
           return;
         }
         setContacts(response.data.content);
@@ -105,23 +112,18 @@ function Home() {
   const loadTitles = useCallback(async () => {
     const requestId = ++titleRequestId.current;
     setTitlesError(false);
-
     try {
-      const response = await contactApi.get("/contacts/titles");
+      const response = await requestTitles();
       if (requestId === titleRequestId.current) {
         setTitles(response.data);
       }
     } catch (error) {
+      console.error("Error loading contact titles:", error);
       if (requestId === titleRequestId.current) {
-        console.error("Error loading contact titles:", error);
         setTitlesError(true);
       }
     }
   }, []);
-
-  useEffect(() => {
-    loadContactsRef.current = loadContacts;
-  }, [loadContacts]);
 
   useEffect(() => {
     loadRequestId.current += 1;
@@ -131,12 +133,31 @@ function Home() {
 
   useEffect(() => {
     const timeoutId = setTimeout(loadTitles, 0);
-
     return () => {
       clearTimeout(timeoutId);
       titleRequestId.current += 1;
     };
   }, [loadTitles]);
+
+  useEffect(() => {
+    if (!contactToDelete) {
+      return undefined;
+    }
+
+    deleteDialogInitialFocusRef.current?.focus();
+
+    return () => {
+      if (deleteTriggerRef.current?.isConnected) {
+        deleteTriggerRef.current.focus();
+      }
+    };
+  }, [contactToDelete]);
+
+  useEffect(() => {
+    if (!profileContact) return undefined;
+    profileCloseRef.current?.focus();
+    return () => profileTriggerRef.current?.isConnected && profileTriggerRef.current.focus();
+  }, [profileContact]);
 
   const changeSearch = (value) => {
     setSearchTerm(value);
@@ -153,38 +174,8 @@ function Home() {
     setPage(0);
   };
 
-  useEffect(() => {
-    if (!contactToDelete) {
-      return undefined;
-    }
-
-    deleteDialogInitialFocusRef.current?.focus();
-
-    return () => {
-      if (deleteTriggerRef.current?.isConnected) {
-        deleteTriggerRef.current.focus();
-      }
-    };
-  }, [contactToDelete]);
-
   const saveContact = async (data) => {
-    const contact = {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      title: data.title,
-      emailAddresses: [
-        {
-          email: data.email,
-          label: "Personal",
-        },
-      ],
-      phoneNumbers: [
-        {
-          phoneNumber: data.phone,
-          label: "Mobile",
-        },
-      ],
-    };
+    const contact = data;
 
     try {
       const response = await contactApi.post("/contacts", contact);
@@ -202,7 +193,7 @@ function Home() {
           index === contactIndex ? response.data : currentContact,
         );
       });
-      void loadContactsRef.current();
+      void loadContacts();
       void loadTitles();
       toast.success("Contact added successfully!", {
         duration: 4000,
@@ -214,6 +205,7 @@ function Home() {
           borderRadius: "8px",
         },
       });
+      setIsFormDirty(false);
       setShowForm(false);
     } catch (error) {
       console.error("Error saving contact:", error);
@@ -238,24 +230,7 @@ function Home() {
       return;
     }
 
-    const contact = {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      title: data.title,
-      emailAddresses: editingContact.emailAddresses?.length
-        ? editingContact.emailAddresses.map((emailAddress, index) => ({
-            email: index === 0 ? data.email : emailAddress.email,
-            label: emailAddress.label || "Personal",
-          }))
-        : [{ email: data.email, label: "Personal" }],
-      phoneNumbers: editingContact.phoneNumbers?.length
-        ? editingContact.phoneNumbers.map((phoneNumber, index) => ({
-            phoneNumber:
-              index === 0 ? data.phone : phoneNumber.phoneNumber,
-            label: phoneNumber.label || "Mobile",
-          }))
-        : [{ phoneNumber: data.phone, label: "Mobile" }],
-    };
+    const contact = data;
 
     try {
       const response = await contactApi.put(
@@ -270,7 +245,7 @@ function Home() {
             : currentContact,
         ),
       );
-      void loadContactsRef.current();
+      void loadContacts();
       void loadTitles();
       toast.success("Contact updated successfully!", {
         duration: 4000,
@@ -283,6 +258,7 @@ function Home() {
         },
       });
       setEditingContact(null);
+      setIsFormDirty(false);
       setShowForm(false);
     } catch (error) {
       console.error("Error updating contact:", error);
@@ -294,12 +270,59 @@ function Home() {
 
   const editContact = (contact) => {
     setEditingContact(contact);
+    setIsFormDirty(false);
     setShowForm(true);
     setTimeout(scrollToForm, 100);
   };
 
+  const loadContactProfile = async (contactId) => {
+    const requestId = ++profileRequestId.current;
+    setProfileState("loading");
+    setProfileError("");
+    try {
+      const response = await contactApi.get(`/contacts/${contactId}`);
+      if (requestId === profileRequestId.current) {
+        setProfileContact(response.data);
+        setProfileState("ready");
+      }
+    } catch (error) {
+      if (requestId === profileRequestId.current) {
+        setProfileState("error");
+        setProfileError(
+          error.response?.status === 404
+            ? "This contact no longer exists."
+            : "Unable to load this contact. Please try again.",
+        );
+      }
+    }
+  };
+
+  const viewContact = (contact) => {
+    profileTriggerRef.current = document.activeElement;
+    setProfileContact(contact);
+    void loadContactProfile(contact.id);
+  };
+
+  const closeContactProfile = () => {
+    profileRequestId.current += 1;
+    setProfileContact(null);
+    setProfileState("idle");
+    setProfileError("");
+  };
+
+  const handleProfileKeyDown = (event) => {
+    if (event.key === "Escape") closeContactProfile();
+    if (event.key !== "Tab") return;
+    const elements = Array.from(profileDialogRef.current?.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []);
+    if (!elements.length) return;
+    if (event.shiftKey && document.activeElement === elements[0]) { event.preventDefault(); elements.at(-1).focus(); }
+    else if (!event.shiftKey && document.activeElement === elements.at(-1)) { event.preventDefault(); elements[0].focus(); }
+  };
+
   const cancelEdit = () => {
+    if (isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
     setEditingContact(null);
+    setIsFormDirty(false);
     setShowForm(false);
   };
 
@@ -347,11 +370,8 @@ function Home() {
     try {
       await contactApi.delete(`/contacts/${contactToDelete.id}`);
       contactsVersion.current += 1;
-      setContacts((currentContacts) =>
-        currentContacts.filter(
-          (currentContact) => currentContact.id !== contactToDelete.id,
-        ),
-      );
+      await loadContacts(page);
+      void loadTitles();
 
       if (editingContact?.id === contactToDelete.id) {
         setEditingContact(null);
@@ -369,8 +389,6 @@ function Home() {
         },
       });
       setContactToDelete(null);
-      void loadContactsRef.current();
-      void loadTitles();
     } catch (error) {
       console.error("Error deleting contact:", error);
       const message =
@@ -388,6 +406,20 @@ function Home() {
 
   const scrollToForm = () => {
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const handleProfile = () => {
+    if (showForm && isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
+    onProfile();
+  };
+
+  const toggleContactForm = () => {
+    if (showForm && isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
+
+    setEditingContact(null);
+    setIsFormDirty(false);
+    setShowForm((current) => !current);
+    if (!showForm) setTimeout(scrollToForm, 100);
   };
 
   return (
@@ -418,6 +450,13 @@ function Home() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                onClick={handleProfile}
+                className="flex items-center gap-2 rounded-full border border-[#98C1D9]/60 px-4 py-2 text-sm font-semibold text-[#E0FBFC] transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[#98C1D9]"
+              >
+                <CircleUserRound className="h-4 w-4" aria-hidden="true" /> Profile
+              </button>
+              <button
+                type="button"
                 onClick={() => setIsDarkMode((currentMode) => !currentMode)}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-[#E0FBFC] hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-[#98C1D9] transition-all duration-200"
                 aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
@@ -426,13 +465,7 @@ function Home() {
                 {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
               <button
-                onClick={() => {
-                  setEditingContact(null);
-                  setShowForm(!showForm);
-                  if (!showForm) {
-                    setTimeout(scrollToForm, 100);
-                  }
-                }}
+                onClick={toggleContactForm}
                 className="flex items-center gap-2 px-5 py-2.5 bg-[#EE6C4D] text-white rounded-full font-semibold hover:bg-[#F07A5E] hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200"
               >
                 <Plus className="h-5 w-5" />
@@ -470,6 +503,7 @@ function Home() {
                 initialData={editFormData}
                 onCancel={cancelEdit}
                 isDarkMode={isDarkMode}
+                onDirtyChange={setIsFormDirty}
               />
             </div>
           )}
@@ -483,6 +517,7 @@ function Home() {
             {contacts.length > 0 && (
               <ContactList
                 contacts={contacts}
+                onView={viewContact}
                 onEdit={editContact}
                 onDelete={openDeleteDialog}
                 isDarkMode={isDarkMode}
@@ -505,7 +540,7 @@ function Home() {
               <p className="text-[#293241]">Unable to load contacts.</p>
               <button
                 type="button"
-                onClick={loadContacts}
+                onClick={() => void loadContacts()}
                 className="mt-4 rounded-lg bg-[#16425B] px-4 py-2 font-semibold text-white hover:bg-[#3D5A80]"
               >
                 Try Again
@@ -517,6 +552,7 @@ function Home() {
         ) : (
           <ContactList
             contacts={contacts}
+            onView={viewContact}
             onEdit={editContact}
             onDelete={openDeleteDialog}
             isDarkMode={isDarkMode}
@@ -536,6 +572,8 @@ function Home() {
           />
         )}
       </div>
+
+      {profileContact && <ContactProfile contact={profileContact} state={profileState} error={profileError} onRetry={() => void loadContactProfile(profileContact.id)} onClose={closeContactProfile} isDarkMode={isDarkMode} dialogRef={profileDialogRef} closeRef={profileCloseRef} onKeyDown={handleProfileKeyDown} />}
 
       {contactToDelete && (
         <div
