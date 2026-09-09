@@ -25,6 +25,7 @@ function Home({ onProfile }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [contactToDelete, setContactToDelete] = useState(null);
   const [profileContact, setProfileContact] = useState(null);
@@ -32,7 +33,6 @@ function Home({ onProfile }) {
   const [profileError, setProfileError] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const formRef = useRef(null);
-  const loadContactsRef = useRef(null);
   const loadRequestId = useRef(0);
   const titleRequestId = useRef(0);
   const contactsVersion = useRef(0);
@@ -81,11 +81,8 @@ function Home({ onProfile }) {
         requestId === loadRequestId.current &&
         requestContactsVersion === contactsVersion.current
       ) {
-        if (
-          requestedPage > 0 &&
-          (response.data.totalPages === 0 || requestedPage >= response.data.totalPages)
-        ) {
-          setPage(Math.max(response.data.totalPages - 1, 0));
+        if (response.data.totalPages > 0 && requestedPage >= response.data.totalPages) {
+          setPage(response.data.totalPages - 1);
           return;
         }
         setContacts(response.data.content);
@@ -121,16 +118,12 @@ function Home({ onProfile }) {
         setTitles(response.data);
       }
     } catch (error) {
+      console.error("Error loading contact titles:", error);
       if (requestId === titleRequestId.current) {
-        console.error("Error loading contact titles:", error);
         setTitlesError(true);
       }
     }
   }, []);
-
-  useEffect(() => {
-    loadContactsRef.current = loadContacts;
-  }, [loadContacts]);
 
   useEffect(() => {
     loadRequestId.current += 1;
@@ -200,7 +193,7 @@ function Home({ onProfile }) {
           index === contactIndex ? response.data : currentContact,
         );
       });
-      void loadContactsRef.current();
+      void loadContacts();
       void loadTitles();
       toast.success("Contact added successfully!", {
         duration: 4000,
@@ -212,6 +205,7 @@ function Home({ onProfile }) {
           borderRadius: "8px",
         },
       });
+      setIsFormDirty(false);
       setShowForm(false);
     } catch (error) {
       console.error("Error saving contact:", error);
@@ -251,7 +245,7 @@ function Home({ onProfile }) {
             : currentContact,
         ),
       );
-      void loadContactsRef.current();
+      void loadContacts();
       void loadTitles();
       toast.success("Contact updated successfully!", {
         duration: 4000,
@@ -264,6 +258,7 @@ function Home({ onProfile }) {
         },
       });
       setEditingContact(null);
+      setIsFormDirty(false);
       setShowForm(false);
     } catch (error) {
       console.error("Error updating contact:", error);
@@ -275,6 +270,7 @@ function Home({ onProfile }) {
 
   const editContact = (contact) => {
     setEditingContact(contact);
+    setIsFormDirty(false);
     setShowForm(true);
     setTimeout(scrollToForm, 100);
   };
@@ -324,7 +320,9 @@ function Home({ onProfile }) {
   };
 
   const cancelEdit = () => {
+    if (isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
     setEditingContact(null);
+    setIsFormDirty(false);
     setShowForm(false);
   };
 
@@ -410,6 +408,20 @@ function Home({ onProfile }) {
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const handleProfile = () => {
+    if (showForm && isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
+    onProfile();
+  };
+
+  const toggleContactForm = () => {
+    if (showForm && isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
+
+    setEditingContact(null);
+    setIsFormDirty(false);
+    setShowForm((current) => !current);
+    if (!showForm) setTimeout(scrollToForm, 100);
+  };
+
   return (
     <div
       className={`min-h-screen transition-colors duration-300 ${
@@ -438,7 +450,7 @@ function Home({ onProfile }) {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={onProfile}
+                onClick={handleProfile}
                 className="flex items-center gap-2 rounded-full border border-[#98C1D9]/60 px-4 py-2 text-sm font-semibold text-[#E0FBFC] transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[#98C1D9]"
               >
                 <CircleUserRound className="h-4 w-4" aria-hidden="true" /> Profile
@@ -453,13 +465,7 @@ function Home({ onProfile }) {
                 {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
               <button
-                onClick={() => {
-                  setEditingContact(null);
-                  setShowForm(!showForm);
-                  if (!showForm) {
-                    setTimeout(scrollToForm, 100);
-                  }
-                }}
+                onClick={toggleContactForm}
                 className="flex items-center gap-2 px-5 py-2.5 bg-[#EE6C4D] text-white rounded-full font-semibold hover:bg-[#F07A5E] hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200"
               >
                 <Plus className="h-5 w-5" />
@@ -497,6 +503,7 @@ function Home({ onProfile }) {
                 initialData={editFormData}
                 onCancel={cancelEdit}
                 isDarkMode={isDarkMode}
+                onDirtyChange={setIsFormDirty}
               />
             </div>
           )}

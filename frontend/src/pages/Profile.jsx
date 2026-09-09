@@ -56,12 +56,8 @@ function ChangePasswordModal({ onClose }) {
   const dialogRef = useRef(null);
   const firstInputRef = useRef(null);
   const requestInProgress = useRef(false);
-  const closeTimerRef = useRef(null);
 
-  useEffect(() => {
-    firstInputRef.current?.focus();
-    return () => window.clearTimeout(closeTimerRef.current);
-  }, []);
+  useEffect(() => { firstInputRef.current?.focus(); }, []);
 
   const close = () => { if (!submitting) onClose(); };
   const keyDown = (event) => {
@@ -90,7 +86,7 @@ function ChangePasswordModal({ onClose }) {
     try {
       await changePassword(form);
       setForm(emptyForm); setErrors({}); setFeedback({ type: "success", message: "Password changed successfully" });
-      closeTimerRef.current = window.setTimeout(onClose, 900);
+      window.setTimeout(onClose, 900);
     } catch (error) {
       if (error.response?.data?.errors) setErrors(error.response.data.errors);
       const serverMessage = error.response?.data?.message;

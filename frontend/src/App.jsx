@@ -48,14 +48,14 @@ function App() {
     <ErrorBoundary>
       {!user ? (
         page === "register" ? (
-          <Registration onBack={() => setPage("login")} />
+          <Registration onBack={() => setPage("login")} onRegistration={(profile) => { setUser(profile); setPage("home"); }} />
         ) : (
           <Login onLogin={(profile) => { setUser(profile); setPage("home"); }} onRegister={() => setPage("register")} />
         )
       ) : page === "profile" ? (
         <Profile user={user} onBack={() => setPage("home")} onLogout={handleLogout} />
       ) : (
-        <Home onProfile={() => setPage("profile")} />
+        <Home onProfile={() => setPage("profile")} onUnauthorized={clearAuthentication} />
       )}
     </ErrorBoundary>
   );
