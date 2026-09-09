@@ -14,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import com.contactmanager.backend.dto.RegistrationRequest;
-import com.contactmanager.backend.dto.RegistrationResponse;
 import com.contactmanager.backend.repository.UserRepository;
 
 @SpringBootTest
@@ -35,23 +34,24 @@ class ConcurrentUserRegistrationIntegrationTests {
         CountDownLatch start = new CountDownLatch(1);
 
         try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
-            Future<RegistrationResponse> first = executor.submit(() -> registerWhenReleased(request, ready, start));
-            Future<RegistrationResponse> second = executor.submit(() -> registerWhenReleased(request, ready, start));
+            Future<RegistrationResult> first = executor.submit(() -> registerWhenReleased(request, ready, start));
+            Future<RegistrationResult> second = executor.submit(() -> registerWhenReleased(request, ready, start));
 
             assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
             start.countDown();
 
-            RegistrationResponse firstResponse = first.get(30, TimeUnit.SECONDS);
-            RegistrationResponse secondResponse = second.get(30, TimeUnit.SECONDS);
+            RegistrationResult firstResult = first.get(30, TimeUnit.SECONDS);
+            RegistrationResult secondResult = second.get(30, TimeUnit.SECONDS);
 
-            assertThat(firstResponse).isEqualTo(secondResponse);
+            assertThat(firstResult.response()).isEqualTo(secondResult.response());
+            assertThat(firstResult.created() ^ secondResult.created()).isTrue();
             assertThat(userRepository.findAllByIdentifier(email)).hasSize(1);
         } finally {
             userRepository.deleteAll(userRepository.findAllByIdentifier(email));
         }
     }
 
-    private RegistrationResponse registerWhenReleased(RegistrationRequest request,
+    private RegistrationResult registerWhenReleased(RegistrationRequest request,
             CountDownLatch ready, CountDownLatch start) throws InterruptedException {
         ready.countDown();
         if (!start.await(10, TimeUnit.SECONDS)) {
