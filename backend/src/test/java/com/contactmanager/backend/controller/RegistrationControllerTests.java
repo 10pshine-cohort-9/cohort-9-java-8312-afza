@@ -78,6 +78,25 @@ class RegistrationControllerTests {
     }
 
     @Test
+    void committedRegistrationReportsRecoverableAutomaticSignInFailure() throws Exception {
+        RegistrationResponse response = new RegistrationResponse(
+                null, null, null, null, null, "Registration accepted");
+        when(registrationService.register(any(RegistrationRequest.class)))
+                .thenReturn(new RegistrationResult(response, true, "ada@example.com"));
+        when(authenticatedSessionService.authenticate(any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("session unavailable"));
+
+        mockMvc.perform(post("/api/users/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","password":"password123"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.message").value(
+                        "Account created, but automatic sign-in failed. Please sign in."));
+    }
+
+    @Test
     void invalidRegistrationReturnsFieldErrorsWithoutCallingService() throws Exception {
         mockMvc.perform(post("/api/users/register")
                         .contentType(MediaType.APPLICATION_JSON)

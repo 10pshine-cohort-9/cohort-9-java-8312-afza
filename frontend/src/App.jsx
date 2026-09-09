@@ -55,7 +55,7 @@ function App() {
       ) : page === "profile" ? (
         <Profile user={user} onBack={() => setPage("home")} onLogout={handleLogout} />
       ) : (
-        <Home onProfile={() => setPage("profile")} />
+        <Home onProfile={() => setPage("profile")} onUnauthorized={clearAuthentication} />
       )}
     </ErrorBoundary>
   );

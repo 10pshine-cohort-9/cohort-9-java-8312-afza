@@ -15,32 +15,53 @@ function ContactProfile({ contact, state, error, onRetry, onClose, isDarkMode, d
           <button ref={closeRef} type="button" onClick={onClose} aria-label="Close contact profile" className="rounded-full p-2 text-[#60758A] hover:bg-black/5"><X className="h-5 w-5" /></button>
         </div>
 
-        {state === "loading" ? (
-          <div className="flex min-h-48 items-center justify-center gap-3" role="status"><LoaderCircle className="h-6 w-6 animate-spin" /> Loading contact profile...</div>
-        ) : state === "error" ? (
-          <div className="flex min-h-48 flex-col items-center justify-center gap-4 text-center" role="alert">
-            <p>{error}</p>
-            <button type="button" onClick={onRetry} className="rounded-full bg-[#16425B] px-5 py-2.5 font-semibold text-white">Try Again</button>
-          </div>
-        ) : (
-          <>
-            <ProfileSection title="Email addresses" icon={Mail} items={contact.emailAddresses} valueKey="email" empty="No email addresses" isDarkMode={isDarkMode} />
-            <ProfileSection title="Phone numbers" icon={Phone} items={contact.phoneNumbers} valueKey="phoneNumber" empty="No phone numbers" isDarkMode={isDarkMode} />
-          </>
-        )}
-        <div className="mt-6 flex justify-end"><button type="button" onClick={onClose} className="rounded-full bg-[#16425B] px-5 py-2.5 font-semibold text-white">Close</button></div>
+        <ProfileContent contact={contact} state={state} error={error} onRetry={onRetry} isDarkMode={isDarkMode} />
+
+        <div className="mt-6 flex justify-end">
+          <button type="button" onClick={onClose} className="rounded-full bg-[#16425B] px-5 py-2.5 font-semibold text-white">Close</button>
+        </div>
       </div>
     </div>
   );
 }
 
-function ProfileSection({ title, icon: Icon, items = [], valueKey, empty, isDarkMode }) {
+function ProfileContent({ contact, state, error, onRetry, isDarkMode }) {
+  if (state === "loading") return <LoadingState />;
+  if (state === "error") return <ErrorState error={error} onRetry={onRetry} />;
+  return <ReadyState contact={contact} isDarkMode={isDarkMode} />;
+}
+
+function LoadingState() {
+  return <div className="flex min-h-48 items-center justify-center gap-3" role="status"><LoaderCircle className="h-6 w-6 animate-spin" /> Loading contact profile...</div>;
+}
+
+function ErrorState({ error, onRetry }) {
+  return (
+    <div className="flex min-h-48 flex-col items-center justify-center gap-4 text-center" role="alert">
+      <p>{error}</p>
+      <button type="button" onClick={onRetry} className="rounded-full bg-[#16425B] px-5 py-2.5 font-semibold text-white">Try Again</button>
+    </div>
+  );
+}
+
+function ReadyState({ contact, isDarkMode }) {
+  return (
+    <>
+      <ProfileSection title="Email addresses" icon={Mail} items={contact.emailAddresses} valueKey="email" empty="No email addresses" isDarkMode={isDarkMode} />
+      <ProfileSection title="Phone numbers" icon={Phone} items={contact.phoneNumbers} valueKey="phoneNumber" empty="No phone numbers" isDarkMode={isDarkMode} />
+    </>
+  );
+}
+
+function ProfileSection({ title, icon: Icon, items, valueKey, empty, isDarkMode }) {
+  const entries = items ?? [];
+
   return (
     <section className={`mt-6 rounded-2xl border p-4 ${isDarkMode ? "border-white/10" : "border-[#E7F1F6]"}`}>
       <h3 className="mb-3 flex items-center gap-2 font-semibold"><Icon className="h-5 w-5 text-[#EE6C4D]" />{title}</h3>
-      {items.length ? (
+      {entries.length ? (
         <ul className="space-y-2">
-          {items.map((item, index) => (
+          {entries.map((item, index) => (
             <li key={`${item[valueKey]}-${index}`} className="flex items-center justify-between gap-4">
               <span className="break-all">{item[valueKey]}</span>
               <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${isDarkMode ? "bg-white/10 text-[#AFCBDD]" : "bg-[#EEF5F8] text-[#60758A]"}`}>{item.label}</span>

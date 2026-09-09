@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-users-and-contact-ownership
+      author: contact-manager
+      changes:
+        - sqlFile:
+            path: 001-create-users-and-contact-ownership.sql
+            relativeToChangelogFile: true
+            splitStatements: false

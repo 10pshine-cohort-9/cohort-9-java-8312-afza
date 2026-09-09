@@ -41,7 +41,16 @@ public class RegistrationController {
             HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         RegistrationResult result = registrationService.register(request);
         if (result.created()) {
-            authenticatedSessionService.authenticate(result.identifier(), request.password(), httpRequest, httpResponse);
+            try {
+                authenticatedSessionService.authenticate(
+                        result.identifier(), request.password(), httpRequest, httpResponse);
+            } catch (RuntimeException exception) {
+                logger.error("Registration committed, but automatic sign-in failed for the new account", exception);
+                RegistrationResponse committedResponse = new RegistrationResponse(
+                        null, null, null, null, null,
+                        "Account created, but automatic sign-in failed. Please sign in.");
+                return ResponseEntity.status(HttpStatus.CREATED).body(committedResponse);
+            }
         }
         logger.info("Registration request accepted successfully");
         return ResponseEntity.status(HttpStatus.CREATED).body(result.response());

@@ -34,8 +34,8 @@ public class UserRegistrationService {
         String identifier = usesEmail
                 ? request.email().trim().toLowerCase(Locale.ROOT)
                 : request.phone().trim();
-        // Perform the intentionally expensive password hash for every valid request so
-        // an existing identifier does not have a noticeably faster response path.
+        // Always perform the expensive password work so existing and new identifiers
+        // follow comparable code paths and cannot be distinguished by a cheap timing probe.
         String passwordHash = passwordEncoder.encode(request.password());
 
         try {
