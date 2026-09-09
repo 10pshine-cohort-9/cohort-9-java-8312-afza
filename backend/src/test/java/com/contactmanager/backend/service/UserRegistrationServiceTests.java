@@ -41,13 +41,15 @@ class UserRegistrationServiceTests {
         when(userRepository.existsByIdentifier("user@example.com"))
                 .thenReturn(false)
                 .thenReturn(true);
-        RegistrationResponse newIdentifierResponse = service.register(request);
-        RegistrationResponse existingIdentifierResponse = service.register(request);
+        RegistrationResult newIdentifierResult = service.register(request);
+        RegistrationResult existingIdentifierResult = service.register(request);
 
-        assertThat(existingIdentifierResponse).isEqualTo(newIdentifierResponse);
-        assertThat(newIdentifierResponse.id()).isNull();
-        assertThat(newIdentifierResponse.email()).isNull();
-        assertThat(newIdentifierResponse.phone()).isNull();
+        assertThat(existingIdentifierResult.response()).isEqualTo(newIdentifierResult.response());
+        assertThat(newIdentifierResult.created()).isTrue();
+        assertThat(existingIdentifierResult.created()).isFalse();
+        assertThat(newIdentifierResult.response().id()).isNull();
+        assertThat(newIdentifierResult.response().email()).isNull();
+        assertThat(newIdentifierResult.response().phone()).isNull();
     }
 
     @Test
@@ -58,9 +60,10 @@ class UserRegistrationServiceTests {
         doThrow(new DataIntegrityViolationException("duplicate", constraintViolation))
                 .when(registrationWriter).insert(any(User.class));
 
-        RegistrationResponse response = service.register(request());
+        RegistrationResult result = service.register(request());
 
-        assertThat(response.message())
+        assertThat(result.created()).isFalse();
+        assertThat(result.response().message())
                 .isEqualTo("If the provided contact information is eligible, registration has been accepted");
     }
 
