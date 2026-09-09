@@ -4,6 +4,7 @@ import { Search, Filter, ArrowUpDown, X } from "lucide-react";
 
 function ContactList({
   contacts,
+  onView,
   onEdit,
   onDelete,
   isDarkMode,
@@ -100,16 +101,9 @@ function ContactList({
           )}
         </div>
         {titlesError && (
-          <div
-            className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#EE6C4D]/60 p-3 text-sm ${isDarkMode ? "bg-[#242B31] text-[#F7FAFC]" : "bg-white text-[#293241]"}`}
-            role="alert"
-          >
+          <div className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#EE6C4D]/60 p-3 text-sm ${isDarkMode ? "bg-[#242B31] text-[#F7FAFC]" : "bg-white text-[#293241]"}`} role="alert">
             <span>Unable to load title filters.</span>
-            <button
-              type="button"
-              onClick={() => void onRetryTitles()}
-              className="rounded-lg bg-[#16425B] px-3 py-2 font-semibold text-white hover:bg-[#3D5A80]"
-             >
+            <button type="button" onClick={onRetryTitles} className="rounded-lg bg-[#16425B] px-3 py-2 font-semibold text-white hover:bg-[#3D5A80]">
               Try Again
             </button>
           </div>
@@ -143,7 +137,8 @@ function ContactList({
           {contacts.map((contact) => (
             <ContactCard
               key={contact.id}
-              contact={contact}
+            contact={contact}
+            onView={onView}
               onEdit={onEdit}
               onDelete={onDelete}
               isDarkMode={isDarkMode}

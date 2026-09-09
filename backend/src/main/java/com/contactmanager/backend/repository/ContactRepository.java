@@ -14,7 +14,8 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
 
     @Query("""
             SELECT c FROM Contact c
-            WHERE (:search = '' OR
+            WHERE c.owner.id = :ownerId
+            AND (:search = '' OR
                 LOWER(COALESCE(c.firstName, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR
                 LOWER(COALESCE(c.lastName, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR
                 EXISTS (SELECT e.id FROM EmailAddress e WHERE e.contact = c
@@ -24,6 +25,7 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
             AND (:title = '' OR c.title = :title)
             """)
     Page<Contact> findContacts(
+            @Param("ownerId") Long ownerId,
             @Param("search") String search,
             @Param("title") String title,
             Pageable pageable);
@@ -31,7 +33,8 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
     @Query(value = """
             SELECT c FROM Contact c
             LEFT JOIN c.emailAddresses email
-            WHERE (:search = '' OR
+            WHERE c.owner.id = :ownerId
+            AND (:search = '' OR
                 LOWER(COALESCE(c.firstName, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR
                 LOWER(COALESCE(c.lastName, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR
                 EXISTS (SELECT e.id FROM EmailAddress e WHERE e.contact = c
@@ -43,7 +46,8 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
             ORDER BY MIN(LOWER(email.email)), c.id
             """, countQuery = """
             SELECT COUNT(c) FROM Contact c
-            WHERE (:search = '' OR
+            WHERE c.owner.id = :ownerId
+            AND (:search = '' OR
                 LOWER(COALESCE(c.firstName, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR
                 LOWER(COALESCE(c.lastName, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR
                 EXISTS (SELECT e.id FROM EmailAddress e WHERE e.contact = c
@@ -53,11 +57,14 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
             AND (:title = '' OR c.title = :title)
             """)
     Page<Contact> findContactsSortedByEmail(
+            @Param("ownerId") Long ownerId,
             @Param("search") String search,
             @Param("title") String title,
             Pageable pageable);
 
-    @Query("SELECT DISTINCT c.title FROM Contact c WHERE c.title IS NOT NULL AND c.title <> '' ORDER BY c.title")
-    List<String> findDistinctTitles();
+    @Query("SELECT DISTINCT c.title FROM Contact c WHERE c.owner.id = :ownerId AND c.title IS NOT NULL AND c.title <> '' ORDER BY c.title")
+    List<String> findDistinctTitles(@Param("ownerId") Long ownerId);
+
+    java.util.Optional<Contact> findByIdAndOwnerId(Long id, Long ownerId);
 
 }

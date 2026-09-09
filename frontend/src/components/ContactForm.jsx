@@ -1,345 +1,70 @@
-import { useRef, useState } from "react";
-import { User, Mail, Phone, Briefcase, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Briefcase, Mail, Phone, Plus, Trash2, User, X } from "lucide-react";
 
-const emptyFormData = {
-  firstName: "",
-  lastName: "",
-  title: "",
-  email: "",
-  phone: "",
-};
+const newEmail = () => ({ email: "", label: "Personal" });
+const newPhone = () => ({ phoneNumber: "", label: "Personal" });
+const emptyFormData = () => ({ firstName: "", lastName: "", title: "", emailAddresses: [newEmail()], phoneNumbers: [newPhone()] });
+const normalize = (data) => data ? {
+  firstName: data.firstName || "", lastName: data.lastName || "", title: data.title || "",
+  emailAddresses: data.emailAddresses?.length ? data.emailAddresses.map(({ email, label }) => ({ email: email || "", label: label || "Personal" })) : [newEmail()],
+  phoneNumbers: data.phoneNumbers?.length ? data.phoneNumbers.map(({ phoneNumber, label }) => ({ phoneNumber: phoneNumber || "", label: label || "Personal" })) : [newPhone()],
+} : emptyFormData();
 
-function ContactForm({
-  onSave,
-  isSubmitting,
-  setIsSubmitting,
-  initialData,
-  onCancel,
-  isDarkMode,
-}) {
-  const [formData, setFormData] = useState(initialData || emptyFormData);
-
+function ContactForm({ onSave, isSubmitting, setIsSubmitting, initialData, onCancel, isDarkMode, onDirtyChange }) {
+  const [formData, setFormData] = useState(() => normalize(initialData));
   const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
   const submissionInProgress = useRef(false);
+  const initialFormData = useRef(normalize(initialData));
 
-  const validateField = (name, value) => {
-    let error = "";
+  useEffect(() => {
+    onDirtyChange(JSON.stringify(formData) !== JSON.stringify(initialFormData.current));
+  }, [formData, onDirtyChange]);
 
-    switch (name) {
-      case "firstName":
-        if (!value.trim()) {
-          error = "First name is required";
-        }
-        break;
-      case "email":
-        if (!value.trim()) {
-          error = "Email is required";
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-          error = "Please enter a valid email address";
-        }
-        break;
-      case "phone":
-        if (!value.trim()) {
-          error = "Phone number is required";
-        } else if (!/^\d+$/.test(value)) {
-          error = "Phone must contain only digits";
-        } else if (value.length < 10) {
-          error = "Phone must be at least 10 digits";
-        } else if (value.length > 15) {
-          error = "Phone must be at most 15 digits";
-        }
-        break;
-      default:
-        break;
-    }
-
-    return error;
-  };
-
-  const validateForm = () => {
-    const newErrors = {};
-    const fieldsToValidate = ["firstName", "email", "phone"];
-
-    fieldsToValidate.forEach((field) => {
-      const error = validateField(field, formData[field]);
-      if (error) {
-        newErrors[field] = error;
-      }
+  const validate = () => {
+    const next = {};
+    if (!formData.firstName.trim()) next.firstName = "First name is required";
+    formData.emailAddresses.forEach((item, index) => {
+      if (!item.email.trim()) return;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) next[`email-${index}`] = "Enter a valid email address";
+      if (!item.label.trim()) next[`email-label-${index}`] = "Label is required";
     });
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
+    formData.phoneNumbers.forEach((item, index) => {
+      if (!item.phoneNumber.trim()) return;
+      if (!/^\+?[0-9]{8,15}$/.test(item.phoneNumber.trim())) next[`phone-${index}`] = "Use 8 to 15 digits, optionally starting with +";
+      if (!item.label.trim()) next[`phone-label-${index}`] = "Label is required";
     });
-
-    if (errors[name]) {
-      setErrors({
-        ...errors,
-        [name]: "",
-      });
-    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
-  const handleBlur = (e) => {
-    const { name, value } = e.target;
-    setTouched({
-      ...touched,
-      [name]: true,
-    });
-
-    const error = validateField(name, value);
-    if (error) {
-      setErrors({
-        ...errors,
-        [name]: error,
-      });
-    } else {
-      const newErrors = { ...errors };
-      delete newErrors[name];
-      setErrors(newErrors);
-    }
+  const setField = ({ target: { name, value } }) => {
+    setFormData((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: undefined }));
   };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (isSubmitting || submissionInProgress.current) {
-      return;
-    }
-
-    const allTouched = {};
-    Object.keys(formData).forEach((key) => {
-      allTouched[key] = true;
-    });
-    setTouched(allTouched);
-
-    if (validateForm()) {
-      submissionInProgress.current = true;
-      setIsSubmitting(true);
-      try {
-        await onSave(formData);
-      } finally {
-        submissionInProgress.current = false;
-      }
-    }
+  const setItem = (collection, index, field, value) => setFormData((current) => ({ ...current, [collection]: current[collection].map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }));
+  const addItem = (collection) => setFormData((current) => ({ ...current, [collection]: [...current[collection], collection === "emailAddresses" ? newEmail() : newPhone()] }));
+  const removeItem = (collection, index) => setFormData((current) => ({ ...current, [collection]: current[collection].filter((_, itemIndex) => itemIndex !== index) }));
+  const submit = async (event) => {
+    event.preventDefault();
+    if (isSubmitting || submissionInProgress.current || !validate()) return;
+    submissionInProgress.current = true;
+    setIsSubmitting(true);
+    try { await onSave({ ...formData, firstName: formData.firstName.trim(), lastName: formData.lastName.trim(), title: formData.title.trim(), emailAddresses: formData.emailAddresses.filter((item) => item.email.trim()).map((item) => ({ email: item.email.trim(), label: item.label.trim() })), phoneNumbers: formData.phoneNumbers.filter((item) => item.phoneNumber.trim()).map((item) => ({ phoneNumber: item.phoneNumber.trim(), label: item.label.trim() })) }); }
+    finally { submissionInProgress.current = false; }
   };
+  const error = (key) => errors[key] && <p className="mt-1 text-sm text-[#EE6C4D]" role="alert"><X className="mr-1 inline h-4 w-4" />{errors[key]}</p>;
 
-  const handleReset = () => {
-    setFormData(emptyFormData);
-    setErrors({});
-    setTouched({});
-  };
-
-  const inputClasses = (fieldName) => {
-    const baseClasses =
-      "w-full px-4 py-3 rounded-xl border border-transparent transition-all duration-200 focus:outline-none focus:ring-2 bg-[#F1F6F8]";
-    const errorClasses = errors[fieldName]
-      ? "ring-2 ring-[#EE6C4D]/60 focus:ring-[#EE6C4D]/40"
-      : "hover:bg-[#E8F1F5] focus:bg-white focus:ring-[#98C1D9]/60";
-    const validClasses =
-      touched[fieldName] && !errors[fieldName] && formData[fieldName]
-        ? "ring-1 ring-[#98C1D9]/60"
-        : "";
-    return `${baseClasses} ${errorClasses} ${validClasses}`;
-  };
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className={`space-y-6 transition-colors duration-300 ${
-        isDarkMode
-          ? "[&_label]:text-[#E8ECEF] [&_input]:bg-[#1B2025] [&_input]:text-[#F7FAFC] [&_input::placeholder]:text-[#89939C] [&_input:focus]:bg-[#1B2025]"
-          : ""
-      }`}
-    >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* First Name */}
-        <div className="space-y-1.5 group">
-          <label htmlFor="firstName" className="block text-sm font-semibold text-[#293241]">
-            First Name <span className="text-[#EE6C4D]">*</span>
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <User className="h-5 w-5 text-[#3D5A80]" />
-            </div>
-            <input
-              id="firstName"
-              type="text"
-              name="firstName"
-              placeholder="John"
-              value={formData.firstName}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              className={`${inputClasses("firstName")} pl-11`}
-              disabled={isSubmitting}
-            />
-          </div>
-          {errors.firstName && touched.firstName && (
-            <p className="text-sm text-[#EE6C4D] mt-1.5 flex items-center gap-1.5 animate-slide-down">
-              <X className="h-4 w-4" /> {errors.firstName}
-            </p>
-          )}
-        </div>
-
-        {/* Last Name */}
-        <div className="space-y-1.5 group">
-          <label htmlFor="lastName" className="block text-sm font-semibold text-[#293241]">
-            Last Name
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <User className="h-5 w-5 text-[#3D5A80]" />
-            </div>
-            <input
-              id="lastName"
-              type="text"
-              name="lastName"
-              placeholder="Doe"
-              value={formData.lastName}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              className={`${inputClasses("lastName")} pl-11`}
-              disabled={isSubmitting}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Title */}
-      <div className="space-y-1.5 group">
-        <label htmlFor="title" className="block text-sm font-semibold text-[#293241]">
-          Title
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-            <Briefcase className="h-5 w-5 text-[#3D5A80]" />
-          </div>
-          <input
-            id="title"
-            type="text"
-            name="title"
-            placeholder="Software Engineer"
-            value={formData.title}
-            onChange={handleChange}
-            onBlur={handleBlur}
-            className={`${inputClasses("title")} pl-11`}
-            disabled={isSubmitting}
-          />
-        </div>
-      </div>
-
-      {/* Email */}
-      <div className="space-y-1.5 group">
-        <label htmlFor="email" className="block text-sm font-semibold text-[#293241]">
-          Email <span className="text-[#EE6C4D]">*</span>
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-            <Mail className="h-5 w-5 text-[#3D5A80]" />
-          </div>
-          <input
-            id="email"
-            type="email"
-            name="email"
-            placeholder="john@example.com"
-            value={formData.email}
-            onChange={handleChange}
-            onBlur={handleBlur}
-            className={`${inputClasses("email")} pl-11`}
-            disabled={isSubmitting}
-          />
-        </div>
-        {errors.email && touched.email && (
-          <p className="text-sm text-[#EE6C4D] mt-1.5 flex items-center gap-1.5 animate-slide-down">
-            <X className="h-4 w-4" /> {errors.email}
-          </p>
-        )}
-      </div>
-
-      {/* Phone */}
-      <div className="space-y-1.5 group">
-        <label htmlFor="phone" className="block text-sm font-semibold text-[#293241]">
-          Phone <span className="text-[#EE6C4D]">*</span>
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-            <Phone className="h-5 w-5 text-[#3D5A80]" />
-          </div>
-          <input
-            id="phone"
-            type="tel"
-            name="phone"
-            placeholder="1234567890"
-            value={formData.phone}
-            onChange={handleChange}
-            onBlur={handleBlur}
-            className={`${inputClasses("phone")} pl-11`}
-            disabled={isSubmitting}
-          />
-        </div>
-        {errors.phone && touched.phone && (
-          <p className="text-sm text-[#EE6C4D] mt-1.5 flex items-center gap-1.5 animate-slide-down">
-            <X className="h-4 w-4" /> {errors.phone}
-          </p>
-        )}
-      </div>
-
-      {/* Form Actions */}
-      <div className="flex gap-4 pt-6">
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="flex-1 px-6 py-3 text-white rounded-full font-semibold bg-[#16425B] hover:bg-[#245B75] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg
-                className="animate-spin h-5 w-5 text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              {initialData ? "Updating..." : "Saving..."}
-            </span>
-          ) : (
-            <span className="flex items-center justify-center gap-2">
-            
-              {initialData ? "Update Contact" : "Save Contact"}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={initialData ? onCancel : handleReset}
-          disabled={isSubmitting}
-          className="px-6 py-3 bg-[#E7F1F6] text-[#293241] rounded-full font-semibold hover:bg-[#D9EAF2] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {initialData ? "Cancel" : "Reset"}
-        </button>
-      </div>
-    </form>
-  );
+  return <form onSubmit={submit} noValidate className={`space-y-6 ${isDarkMode ? "[&_label]:text-[#E8ECEF] [&_input]:bg-[#1B2025] [&_input]:text-[#F7FAFC] [&_select]:bg-[#1B2025] [&_select]:text-[#F7FAFC]" : ""}`}>
+    <div className="grid gap-5 md:grid-cols-2"><TextField id="firstName" label="First Name" required icon={User} value={formData.firstName} onChange={setField} disabled={isSubmitting} /><TextField id="lastName" label="Last Name" icon={User} value={formData.lastName} onChange={setField} disabled={isSubmitting} /></div>{error("firstName")}
+    <TextField id="title" label="Title" icon={Briefcase} value={formData.title} onChange={setField} disabled={isSubmitting} />
+    <Collection title="Email addresses" icon={Mail} onAdd={() => addItem("emailAddresses")} disabled={isSubmitting}>{formData.emailAddresses.map((item, index) => <MethodRow key={`email-${index}`} value={item.email} label={item.label} type="email" id={`email-${index}`} placeholder="name@example.com" labels={["Work", "Personal", "Other"]} onValue={(value) => setItem("emailAddresses", index, "email", value)} onLabel={(value) => setItem("emailAddresses", index, "label", value)} onRemove={() => removeItem("emailAddresses", index)} canRemove={formData.emailAddresses.length > 1} disabled={isSubmitting} valueError={error(`email-${index}`)} labelError={error(`email-label-${index}`)} />)}</Collection>
+    <Collection title="Phone numbers" icon={Phone} onAdd={() => addItem("phoneNumbers")} disabled={isSubmitting}>{formData.phoneNumbers.map((item, index) => <MethodRow key={`phone-${index}`} value={item.phoneNumber} label={item.label} type="tel" id={`phone-${index}`} placeholder="+923001234567" labels={["Work", "Home", "Personal", "Other"]} onValue={(value) => setItem("phoneNumbers", index, "phoneNumber", value)} onLabel={(value) => setItem("phoneNumbers", index, "label", value)} onRemove={() => removeItem("phoneNumbers", index)} canRemove={formData.phoneNumbers.length > 1} disabled={isSubmitting} valueError={error(`phone-${index}`)} labelError={error(`phone-label-${index}`)} />)}</Collection>
+    <div className="flex gap-4 pt-4"><button type="submit" disabled={isSubmitting} className="flex-1 rounded-full bg-[#16425B] px-6 py-3 font-semibold text-white disabled:opacity-50">{isSubmitting ? (initialData ? "Updating..." : "Saving...") : (initialData ? "Update Contact" : "Save Contact")}</button><button type="button" onClick={initialData ? onCancel : () => { setFormData(emptyFormData()); setErrors({}); }} disabled={isSubmitting} className="rounded-full bg-[#E7F1F6] px-6 py-3 font-semibold text-[#293241] disabled:opacity-50">{initialData ? "Cancel" : "Reset"}</button></div>
+  </form>;
 }
+
+function TextField({ id, label, icon: Icon, required, ...props }) { return <div><label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-[#293241]">{label}{required && <span className="text-[#EE6C4D]"> *</span>}</label><div className="relative"><Icon className="absolute left-4 top-3.5 h-5 w-5 text-[#3D5A80]" aria-hidden="true" /><input id={id} name={id} className="w-full rounded-xl bg-[#F1F6F8] px-4 py-3 pl-11 outline-none focus:ring-2 focus:ring-[#98C1D9]/60" {...props} /></div></div>; }
+function Collection({ title, icon: Icon, onAdd, disabled, children }) { return <fieldset className="space-y-3 rounded-2xl border border-[#98C1D9]/40 p-4"><legend className="px-2 font-semibold text-[#293241]"><Icon className="mr-2 inline h-5 w-5 text-[#EE6C4D]" />{title}</legend>{children}<button type="button" onClick={onAdd} disabled={disabled} className="inline-flex items-center gap-2 rounded-full bg-[#E0FBFC] px-4 py-2 text-sm font-semibold text-[#16425B]"><Plus className="h-4 w-4" /> Add another</button></fieldset>; }
+function MethodRow({ value, label, type, id, placeholder, labels, onValue, onLabel, onRemove, canRemove, disabled, valueError, labelError }) { return <div className="grid items-start gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_2.5rem]"><div><label htmlFor={id} className="sr-only">{type === "email" ? "Email address" : "Phone number"}</label><input id={id} type={type} value={value} placeholder={placeholder} onChange={(event) => onValue(event.target.value)} disabled={disabled} className="w-full rounded-xl bg-[#F1F6F8] px-4 py-3 outline-none focus:ring-2 focus:ring-[#98C1D9]/60" />{valueError}</div><div><label htmlFor={`${id}-label`} className="sr-only">Label</label><select id={`${id}-label`} value={label} onChange={(event) => onLabel(event.target.value)} disabled={disabled} className="w-full rounded-xl bg-[#F1F6F8] px-3 py-3 outline-none focus:ring-2 focus:ring-[#98C1D9]/60">{labels.map((option) => <option key={option}>{option}</option>)}</select>{labelError}</div><button type="button" onClick={onRemove} disabled={disabled || !canRemove} aria-label="Remove entry" className="flex h-11 w-10 items-center justify-center rounded-full text-[#D95D40] hover:bg-[#FCE9E4] disabled:invisible"><Trash2 className="h-4 w-4" /></button></div>; }
 
 export default ContactForm;

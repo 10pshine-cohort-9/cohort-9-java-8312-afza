@@ -3,6 +3,7 @@ import { Toaster, toast } from "react-hot-toast";
 import contactApi from "../api/contactApi";
 import ContactForm from "../components/ContactForm";
 import ContactList from "../components/ContactList";
+import ContactProfile from "../components/ContactProfile";
 import LoadingSpinner from "../components/LoadingSpinner";
 import EmptyState from "../components/EmptyState";
 import { Users, Plus, Moon, Sun, Trash2, X, CircleUserRound } from "lucide-react";
@@ -24,11 +25,14 @@ function Home({ onProfile }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [contactToDelete, setContactToDelete] = useState(null);
+  const [profileContact, setProfileContact] = useState(null);
+  const [profileState, setProfileState] = useState("idle");
+  const [profileError, setProfileError] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const formRef = useRef(null);
-  const loadContactsRef = useRef(null);
   const loadRequestId = useRef(0);
   const titleRequestId = useRef(0);
   const contactsVersion = useRef(0);
@@ -36,6 +40,10 @@ function Home({ onProfile }) {
   const deleteDialogRef = useRef(null);
   const deleteDialogInitialFocusRef = useRef(null);
   const deleteTriggerRef = useRef(null);
+  const profileDialogRef = useRef(null);
+  const profileCloseRef = useRef(null);
+  const profileTriggerRef = useRef(null);
+  const profileRequestId = useRef(0);
   const editFormData = useMemo(
     () =>
       editingContact
@@ -43,8 +51,8 @@ function Home({ onProfile }) {
             firstName: editingContact.firstName || "",
             lastName: editingContact.lastName || "",
             title: editingContact.title || "",
-            email: editingContact.emailAddresses?.[0]?.email || "",
-            phone: editingContact.phoneNumbers?.[0]?.phoneNumber || "",
+            emailAddresses: editingContact.emailAddresses || [],
+            phoneNumbers: editingContact.phoneNumbers || [],
           }
         : null,
     [editingContact],
@@ -73,11 +81,8 @@ function Home({ onProfile }) {
         requestId === loadRequestId.current &&
         requestContactsVersion === contactsVersion.current
       ) {
-        if (
-          requestedPage > 0 &&
-          (response.data.totalPages === 0 || requestedPage >= response.data.totalPages)
-        ) {
-          setPage(Math.max(response.data.totalPages - 1, 0));
+        if (response.data.totalPages > 0 && requestedPage >= response.data.totalPages) {
+          setPage(response.data.totalPages - 1);
           return;
         }
         setContacts(response.data.content);
@@ -106,12 +111,6 @@ function Home({ onProfile }) {
 
   const loadTitles = useCallback(async () => {
     const requestId = ++titleRequestId.current;
-    await Promise.resolve();
-
-    if (requestId !== titleRequestId.current) {
-      return;
-    }
-
     setTitlesError(false);
     try {
       const response = await requestTitles();
@@ -119,16 +118,12 @@ function Home({ onProfile }) {
         setTitles(response.data);
       }
     } catch (error) {
+      console.error("Error loading contact titles:", error);
       if (requestId === titleRequestId.current) {
-        console.error("Error loading contact titles:", error);
         setTitlesError(true);
       }
     }
   }, []);
-
-  useEffect(() => {
-    loadContactsRef.current = loadContacts;
-  }, [loadContacts]);
 
   useEffect(() => {
     loadRequestId.current += 1;
@@ -138,7 +133,6 @@ function Home({ onProfile }) {
 
   useEffect(() => {
     const timeoutId = setTimeout(loadTitles, 0);
-
     return () => {
       clearTimeout(timeoutId);
       titleRequestId.current += 1;
@@ -159,6 +153,12 @@ function Home({ onProfile }) {
     };
   }, [contactToDelete]);
 
+  useEffect(() => {
+    if (!profileContact) return undefined;
+    profileCloseRef.current?.focus();
+    return () => profileTriggerRef.current?.isConnected && profileTriggerRef.current.focus();
+  }, [profileContact]);
+
   const changeSearch = (value) => {
     setSearchTerm(value);
     setPage(0);
@@ -175,23 +175,7 @@ function Home({ onProfile }) {
   };
 
   const saveContact = async (data) => {
-    const contact = {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      title: data.title,
-      emailAddresses: [
-        {
-          email: data.email,
-          label: "Personal",
-        },
-      ],
-      phoneNumbers: [
-        {
-          phoneNumber: data.phone,
-          label: "Mobile",
-        },
-      ],
-    };
+    const contact = data;
 
     try {
       const response = await contactApi.post("/contacts", contact);
@@ -209,7 +193,7 @@ function Home({ onProfile }) {
           index === contactIndex ? response.data : currentContact,
         );
       });
-      void loadContactsRef.current();
+      void loadContacts();
       void loadTitles();
       toast.success("Contact added successfully!", {
         duration: 4000,
@@ -221,6 +205,7 @@ function Home({ onProfile }) {
           borderRadius: "8px",
         },
       });
+      setIsFormDirty(false);
       setShowForm(false);
     } catch (error) {
       console.error("Error saving contact:", error);
@@ -245,24 +230,7 @@ function Home({ onProfile }) {
       return;
     }
 
-    const contact = {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      title: data.title,
-      emailAddresses: editingContact.emailAddresses?.length
-        ? editingContact.emailAddresses.map((emailAddress, index) => ({
-            email: index === 0 ? data.email : emailAddress.email,
-            label: emailAddress.label || "Personal",
-          }))
-        : [{ email: data.email, label: "Personal" }],
-      phoneNumbers: editingContact.phoneNumbers?.length
-        ? editingContact.phoneNumbers.map((phoneNumber, index) => ({
-            phoneNumber:
-              index === 0 ? data.phone : phoneNumber.phoneNumber,
-            label: phoneNumber.label || "Mobile",
-          }))
-        : [{ phoneNumber: data.phone, label: "Mobile" }],
-    };
+    const contact = data;
 
     try {
       const response = await contactApi.put(
@@ -277,7 +245,7 @@ function Home({ onProfile }) {
             : currentContact,
         ),
       );
-      void loadContactsRef.current();
+      void loadContacts();
       void loadTitles();
       toast.success("Contact updated successfully!", {
         duration: 4000,
@@ -290,6 +258,7 @@ function Home({ onProfile }) {
         },
       });
       setEditingContact(null);
+      setIsFormDirty(false);
       setShowForm(false);
     } catch (error) {
       console.error("Error updating contact:", error);
@@ -301,12 +270,59 @@ function Home({ onProfile }) {
 
   const editContact = (contact) => {
     setEditingContact(contact);
+    setIsFormDirty(false);
     setShowForm(true);
     setTimeout(scrollToForm, 100);
   };
 
+  const loadContactProfile = async (contactId) => {
+    const requestId = ++profileRequestId.current;
+    setProfileState("loading");
+    setProfileError("");
+    try {
+      const response = await contactApi.get(`/contacts/${contactId}`);
+      if (requestId === profileRequestId.current) {
+        setProfileContact(response.data);
+        setProfileState("ready");
+      }
+    } catch (error) {
+      if (requestId === profileRequestId.current) {
+        setProfileState("error");
+        setProfileError(
+          error.response?.status === 404
+            ? "This contact no longer exists."
+            : "Unable to load this contact. Please try again.",
+        );
+      }
+    }
+  };
+
+  const viewContact = (contact) => {
+    profileTriggerRef.current = document.activeElement;
+    setProfileContact(contact);
+    void loadContactProfile(contact.id);
+  };
+
+  const closeContactProfile = () => {
+    profileRequestId.current += 1;
+    setProfileContact(null);
+    setProfileState("idle");
+    setProfileError("");
+  };
+
+  const handleProfileKeyDown = (event) => {
+    if (event.key === "Escape") closeContactProfile();
+    if (event.key !== "Tab") return;
+    const elements = Array.from(profileDialogRef.current?.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []);
+    if (!elements.length) return;
+    if (event.shiftKey && document.activeElement === elements[0]) { event.preventDefault(); elements.at(-1).focus(); }
+    else if (!event.shiftKey && document.activeElement === elements.at(-1)) { event.preventDefault(); elements[0].focus(); }
+  };
+
   const cancelEdit = () => {
+    if (isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
     setEditingContact(null);
+    setIsFormDirty(false);
     setShowForm(false);
   };
 
@@ -392,6 +408,20 @@ function Home({ onProfile }) {
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const handleProfile = () => {
+    if (showForm && isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
+    onProfile();
+  };
+
+  const toggleContactForm = () => {
+    if (showForm && isFormDirty && !window.confirm("Discard your unsaved contact changes?")) return;
+
+    setEditingContact(null);
+    setIsFormDirty(false);
+    setShowForm((current) => !current);
+    if (!showForm) setTimeout(scrollToForm, 100);
+  };
+
   return (
     <div
       className={`min-h-screen transition-colors duration-300 ${
@@ -420,7 +450,7 @@ function Home({ onProfile }) {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={onProfile}
+                onClick={handleProfile}
                 className="flex items-center gap-2 rounded-full border border-[#98C1D9]/60 px-4 py-2 text-sm font-semibold text-[#E0FBFC] transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[#98C1D9]"
               >
                 <CircleUserRound className="h-4 w-4" aria-hidden="true" /> Profile
@@ -435,13 +465,7 @@ function Home({ onProfile }) {
                 {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
               <button
-                onClick={() => {
-                  setEditingContact(null);
-                  setShowForm(!showForm);
-                  if (!showForm) {
-                    setTimeout(scrollToForm, 100);
-                  }
-                }}
+                onClick={toggleContactForm}
                 className="flex items-center gap-2 px-5 py-2.5 bg-[#EE6C4D] text-white rounded-full font-semibold hover:bg-[#F07A5E] hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200"
               >
                 <Plus className="h-5 w-5" />
@@ -479,6 +503,7 @@ function Home({ onProfile }) {
                 initialData={editFormData}
                 onCancel={cancelEdit}
                 isDarkMode={isDarkMode}
+                onDirtyChange={setIsFormDirty}
               />
             </div>
           )}
@@ -492,6 +517,7 @@ function Home({ onProfile }) {
             {contacts.length > 0 && (
               <ContactList
                 contacts={contacts}
+                onView={viewContact}
                 onEdit={editContact}
                 onDelete={openDeleteDialog}
                 isDarkMode={isDarkMode}
@@ -526,6 +552,7 @@ function Home({ onProfile }) {
         ) : (
           <ContactList
             contacts={contacts}
+            onView={viewContact}
             onEdit={editContact}
             onDelete={openDeleteDialog}
             isDarkMode={isDarkMode}
@@ -545,6 +572,8 @@ function Home({ onProfile }) {
           />
         )}
       </div>
+
+      {profileContact && <ContactProfile contact={profileContact} state={profileState} error={profileError} onRetry={() => void loadContactProfile(profileContact.id)} onClose={closeContactProfile} isDarkMode={isDarkMode} dialogRef={profileDialogRef} closeRef={profileCloseRef} onKeyDown={handleProfileKeyDown} />}
 
       {contactToDelete && (
         <div

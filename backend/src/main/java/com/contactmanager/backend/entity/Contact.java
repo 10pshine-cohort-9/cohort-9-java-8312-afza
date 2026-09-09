@@ -1,5 +1,6 @@
 package com.contactmanager.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +18,11 @@ public class Contact {
     private String lastName;
 
     private String title;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_id", nullable = false)
+    @JsonIgnore
+    private User owner;
 
     @OneToMany(mappedBy = "contact", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<EmailAddress> emailAddresses = new ArrayList<>();
@@ -57,6 +63,14 @@ public class Contact {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public User getOwner() {
+        return owner;
+    }
+
+    public void setOwner(User owner) {
+        this.owner = owner;
     }
 
     public List<EmailAddress> getEmailAddresses() {
