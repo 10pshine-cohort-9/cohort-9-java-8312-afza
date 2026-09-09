@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Briefcase, Mail, Phone, Plus, Trash2, User, X } from "lucide-react";
 
 const newEmail = () => ({ email: "", label: "Personal" });
@@ -10,20 +10,26 @@ const normalize = (data) => data ? {
   phoneNumbers: data.phoneNumbers?.length ? data.phoneNumbers.map(({ phoneNumber, label }) => ({ phoneNumber: phoneNumber || "", label: label || "Personal" })) : [newPhone()],
 } : emptyFormData();
 
-function ContactForm({ onSave, isSubmitting, setIsSubmitting, initialData, onCancel, isDarkMode }) {
+function ContactForm({ onSave, isSubmitting, setIsSubmitting, initialData, onCancel, isDarkMode, onDirtyChange }) {
   const [formData, setFormData] = useState(() => normalize(initialData));
   const [errors, setErrors] = useState({});
   const submissionInProgress = useRef(false);
+  const initialFormData = useRef(normalize(initialData));
+
+  useEffect(() => {
+    onDirtyChange(JSON.stringify(formData) !== JSON.stringify(initialFormData.current));
+  }, [formData, onDirtyChange]);
 
   const validate = () => {
     const next = {};
     if (!formData.firstName.trim()) next.firstName = "First name is required";
     formData.emailAddresses.forEach((item, index) => {
-      if (!item.email.trim()) next[`email-${index}`] = "Email is required";
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) next[`email-${index}`] = "Enter a valid email address";
+      if (!item.email.trim()) return;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) next[`email-${index}`] = "Enter a valid email address";
       if (!item.label.trim()) next[`email-label-${index}`] = "Label is required";
     });
     formData.phoneNumbers.forEach((item, index) => {
+      if (!item.phoneNumber.trim()) return;
       if (!/^\+?[0-9]{8,15}$/.test(item.phoneNumber.trim())) next[`phone-${index}`] = "Use 8 to 15 digits, optionally starting with +";
       if (!item.label.trim()) next[`phone-label-${index}`] = "Label is required";
     });
@@ -35,35 +41,15 @@ function ContactForm({ onSave, isSubmitting, setIsSubmitting, initialData, onCan
     setFormData((current) => ({ ...current, [name]: value }));
     setErrors((current) => ({ ...current, [name]: undefined }));
   };
-  const itemErrorKey = (collection, index, field) => `${collection === "emailAddresses" ? "email" : "phone"}${field === "label" ? "-label" : ""}-${index}`;
-  const setItem = (collection, index, field, value) => {
-    setFormData((current) => ({ ...current, [collection]: current[collection].map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }));
-    setErrors((current) => {
-      const next = { ...current };
-      delete next[itemErrorKey(collection, index, field)];
-      return next;
-    });
-  };
+  const setItem = (collection, index, field, value) => setFormData((current) => ({ ...current, [collection]: current[collection].map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }));
   const addItem = (collection) => setFormData((current) => ({ ...current, [collection]: [...current[collection], collection === "emailAddresses" ? newEmail() : newPhone()] }));
-  const removeItem = (collection, index) => {
-    setFormData((current) => ({ ...current, [collection]: current[collection].filter((_, itemIndex) => itemIndex !== index) }));
-    setErrors((current) => {
-      const prefix = collection === "emailAddresses" ? "email" : "phone";
-      return Object.fromEntries(Object.entries(current).flatMap(([key, value]) => {
-        const match = key.match(new RegExp(`^(${prefix}(?:-label)?)-(\\d+)$`));
-        if (!match) return [[key, value]];
-        const errorIndex = Number(match[2]);
-        if (errorIndex === index) return [];
-        return [[errorIndex > index ? `${match[1]}-${errorIndex - 1}` : key, value]];
-      }));
-    });
-  };
+  const removeItem = (collection, index) => setFormData((current) => ({ ...current, [collection]: current[collection].filter((_, itemIndex) => itemIndex !== index) }));
   const submit = async (event) => {
     event.preventDefault();
     if (isSubmitting || submissionInProgress.current || !validate()) return;
     submissionInProgress.current = true;
     setIsSubmitting(true);
-    try { await onSave({ ...formData, firstName: formData.firstName.trim(), lastName: formData.lastName.trim(), title: formData.title.trim(), emailAddresses: formData.emailAddresses.map((item) => ({ email: item.email.trim(), label: item.label.trim() })), phoneNumbers: formData.phoneNumbers.map((item) => ({ phoneNumber: item.phoneNumber.trim(), label: item.label.trim() })) }); }
+    try { await onSave({ ...formData, firstName: formData.firstName.trim(), lastName: formData.lastName.trim(), title: formData.title.trim(), emailAddresses: formData.emailAddresses.filter((item) => item.email.trim()).map((item) => ({ email: item.email.trim(), label: item.label.trim() })), phoneNumbers: formData.phoneNumbers.filter((item) => item.phoneNumber.trim()).map((item) => ({ phoneNumber: item.phoneNumber.trim(), label: item.label.trim() })) }); }
     finally { submissionInProgress.current = false; }
   };
   const error = (key) => errors[key] && <p className="mt-1 text-sm text-[#EE6C4D]" role="alert"><X className="mr-1 inline h-4 w-4" />{errors[key]}</p>;

@@ -29,15 +29,18 @@ public class UserRegistrationService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    public RegistrationResponse register(RegistrationRequest request) {
+    public RegistrationResult register(RegistrationRequest request) {
         boolean usesEmail = request.email() != null && !request.email().isBlank();
         String identifier = usesEmail
                 ? request.email().trim().toLowerCase(Locale.ROOT)
                 : request.phone().trim();
+        // Always perform the expensive password work so existing and new identifiers
+        // follow comparable code paths and cannot be distinguished by a cheap timing probe.
+        String passwordHash = passwordEncoder.encode(request.password());
 
         try {
             if (userRepository.existsByIdentifier(identifier)) {
-                return registrationAccepted();
+                return registrationAccepted(false, identifier);
             }
         } catch (DataAccessException exception) {
             throw persistenceFailure(exception);
@@ -48,14 +51,14 @@ public class UserRegistrationService {
                 request.lastName().trim(),
                 identifier,
                 usesEmail ? IdentifierType.EMAIL : IdentifierType.PHONE,
-                passwordEncoder.encode(request.password()));
+                passwordHash);
 
         try {
             registrationWriter.insert(user);
-            return registrationAccepted();
+            return registrationAccepted(true, identifier);
         } catch (DataIntegrityViolationException exception) {
             if (violatesIdentifierConstraint(exception)) {
-                return registrationAccepted();
+                return registrationAccepted(false, identifier);
             }
             throw persistenceFailure(exception);
         } catch (DataAccessException exception) {
@@ -67,7 +70,9 @@ public class UserRegistrationService {
         Throwable cause = exception;
         while (cause != null) {
             if (cause instanceof ConstraintViolationException constraintViolation
-                    && "uk_users_identifier".equalsIgnoreCase(constraintViolation.getConstraintName())) {
+                    && constraintViolation.getConstraintName() != null
+                    && constraintViolation.getConstraintName().toLowerCase(Locale.ROOT)
+                            .contains("uk_users_identifier")) {
                 return true;
             }
             cause = cause.getCause();
@@ -75,14 +80,15 @@ public class UserRegistrationService {
         return false;
     }
 
-    private RegistrationResponse registrationAccepted() {
-        return new RegistrationResponse(
+    private RegistrationResult registrationAccepted(boolean created, String identifier) {
+        RegistrationResponse response = new RegistrationResponse(
                 null,
                 null,
                 null,
                 null,
                 null,
                 "If the provided contact information is eligible, registration has been accepted");
+        return new RegistrationResult(response, created, identifier);
     }
 
     private RegistrationPersistenceException persistenceFailure(DataAccessException cause) {

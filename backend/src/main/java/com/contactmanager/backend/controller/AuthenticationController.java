@@ -4,12 +4,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.contactmanager.backend.dto.LoginRequest;
 import com.contactmanager.backend.dto.UserProfileResponse;
 import com.contactmanager.backend.service.AuthenticatedUser;
-import com.contactmanager.backend.service.UserAuthenticationService;
+import com.contactmanager.backend.service.AuthenticatedSessionService;
 import com.contactmanager.backend.service.UserProfileService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,15 +30,12 @@ public class AuthenticationController {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthenticationController.class);
 
-    private final AuthenticationManager authenticationManager;
-    private final SecurityContextRepository securityContextRepository;
+    private final AuthenticatedSessionService authenticatedSessionService;
     private final UserProfileService profileService;
 
-    public AuthenticationController(AuthenticationManager authenticationManager,
-            SecurityContextRepository securityContextRepository,
+    public AuthenticationController(AuthenticatedSessionService authenticatedSessionService,
             UserProfileService profileService) {
-        this.authenticationManager = authenticationManager;
-        this.securityContextRepository = securityContextRepository;
+        this.authenticatedSessionService = authenticatedSessionService;
         this.profileService = profileService;
     }
 
@@ -50,22 +43,9 @@ public class AuthenticationController {
     public UserProfileResponse login(@Valid @RequestBody LoginRequest loginRequest,
             HttpServletRequest request, HttpServletResponse response, CsrfToken csrfToken) {
         csrfToken.getToken();
-        Authentication authentication = authenticationManager.authenticate(
-                UsernamePasswordAuthenticationToken.unauthenticated(
-                        UserAuthenticationService.normalizeIdentifier(loginRequest.identifier()),
-                        loginRequest.password()));
-
-        HttpSession existingSession = request.getSession(false);
-        if (existingSession != null) {
-            request.changeSessionId();
-        }
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(authentication);
-        SecurityContextHolder.setContext(context);
-        securityContextRepository.saveContext(context, request, response);
-        Long userId = principal(authentication).userId();
-        UserProfileResponse profile = profileService.getProfile(userId);
-        logger.info("User logged in successfully: userId={}", userId);
+        UserProfileResponse profile = authenticatedSessionService.authenticate(
+                loginRequest.identifier(), loginRequest.password(), request, response);
+        logger.info("User logged in successfully: userId={}", profile.id());
         return profile;
     }
 

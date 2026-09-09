@@ -22,7 +22,9 @@ export const setUnauthorizedHandler = (handler) => {
 contactApi.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) unauthorizedHandler?.();
+        if (error.response?.status === 401 && !error.config?.suppressUnauthorizedHandler) {
+            unauthorizedHandler?.();
+        }
         return Promise.reject(error);
     },
 );

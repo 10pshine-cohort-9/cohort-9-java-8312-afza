@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail, Phone, UserRound, XCircle } from "lucide-react";
 import { registerUser } from "../api/registrationApi";
+import { getSession } from "../api/authApi";
 
 const initialForm = {
   firstName: "",
@@ -12,7 +13,7 @@ const initialForm = {
   confirmPassword: "",
 };
 
-function Registration({ onBack }) {
+function Registration({ onBack, onRegistration }) {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [feedback, setFeedback] = useState(null);
@@ -69,10 +70,9 @@ function Registration({ onBack }) {
         phone: form.contactMethod === "phone" ? form.phone.trim() : null,
         password: form.password,
       };
-      const response = await registerUser(payload);
-      setFeedback({ type: "success", message: response.data.message || "Registration successful" });
-      setForm(initialForm);
-      setErrors({});
+      await registerUser(payload);
+      const { data: profile } = await getSession({ suppressUnauthorizedHandler: true });
+      onRegistration(profile);
     } catch (error) {
       const response = error.response;
       if (response?.status === 400 && response.data?.errors) {
@@ -80,6 +80,11 @@ function Registration({ onBack }) {
         setFeedback({ type: "error", message: response.data.message || "Please correct the highlighted fields" });
       } else if (response?.status === 409) {
         setFeedback({ type: "error", message: response.data?.message || "An account already exists" });
+      } else if (response?.status === 401) {
+        setFeedback({
+          type: "success",
+          message: "If the provided contact information is eligible, registration has been accepted. Sign in with existing credentials if you already have an account.",
+        });
       } else {
         setFeedback({ type: "error", message: "Registration could not be completed. Please try again." });
       }

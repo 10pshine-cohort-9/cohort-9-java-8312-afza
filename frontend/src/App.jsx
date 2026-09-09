@@ -48,7 +48,7 @@ function App() {
     <ErrorBoundary>
       {!user ? (
         page === "register" ? (
-          <Registration onBack={() => setPage("login")} />
+          <Registration onBack={() => setPage("login")} onRegistration={(profile) => { setUser(profile); setPage("home"); }} />
         ) : (
           <Login onLogin={(profile) => { setUser(profile); setPage("home"); }} onRegister={() => setPage("register")} />
         )

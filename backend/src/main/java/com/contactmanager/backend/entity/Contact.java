@@ -19,8 +19,8 @@ public class Contact {
 
     private String title;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "owner_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_id", nullable = false)
     @JsonIgnore
     private User owner;
 

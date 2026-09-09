@@ -6,6 +6,8 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -17,6 +19,7 @@ import com.contactmanager.backend.controller.AuthenticationController;
 import com.contactmanager.backend.controller.UserProfileController;
 
 @RestControllerAdvice(assignableTypes = { AuthenticationController.class, UserProfileController.class })
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class AuthenticationExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthenticationExceptionHandler.class);
