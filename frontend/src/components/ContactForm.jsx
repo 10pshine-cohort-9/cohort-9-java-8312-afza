@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Briefcase, Mail, Phone, Plus, Trash2, User, X } from "lucide-react";
 
 const newEmail = () => ({ email: "", label: "Personal" });
@@ -10,17 +10,22 @@ const normalize = (data) => data ? {
   phoneNumbers: data.phoneNumbers?.length ? data.phoneNumbers.map(({ phoneNumber, label }) => ({ phoneNumber: phoneNumber || "", label: label || "Personal" })) : [newPhone()],
 } : emptyFormData();
 
-function ContactForm({ onSave, isSubmitting, setIsSubmitting, initialData, onCancel, isDarkMode }) {
+function ContactForm({ onSave, isSubmitting, setIsSubmitting, initialData, onCancel, isDarkMode, onDirtyChange }) {
   const [formData, setFormData] = useState(() => normalize(initialData));
   const [errors, setErrors] = useState({});
   const submissionInProgress = useRef(false);
+  const initialFormData = useRef(normalize(initialData));
+
+  useEffect(() => {
+    onDirtyChange(JSON.stringify(formData) !== JSON.stringify(initialFormData.current));
+  }, [formData, onDirtyChange]);
 
   const validate = () => {
     const next = {};
     if (!formData.firstName.trim()) next.firstName = "First name is required";
     formData.emailAddresses.forEach((item, index) => {
       if (!item.email.trim()) return;
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email.trim())) next[`email-${index}`] = "Enter a valid email address";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) next[`email-${index}`] = "Enter a valid email address";
       if (!item.label.trim()) next[`email-label-${index}`] = "Label is required";
     });
     formData.phoneNumbers.forEach((item, index) => {
@@ -36,23 +41,9 @@ function ContactForm({ onSave, isSubmitting, setIsSubmitting, initialData, onCan
     setFormData((current) => ({ ...current, [name]: value }));
     setErrors((current) => ({ ...current, [name]: undefined }));
   };
-  const errorKey = (collection, index, field) => `${collection === "emailAddresses" ? "email" : "phone"}${field === "label" ? "-label" : ""}-${index}`;
-  const setItem = (collection, index, field, value) => {
-    setFormData((current) => ({ ...current, [collection]: current[collection].map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }));
-    setErrors((current) => ({ ...current, [errorKey(collection, index, field)]: undefined }));
-  };
+  const setItem = (collection, index, field, value) => setFormData((current) => ({ ...current, [collection]: current[collection].map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }));
   const addItem = (collection) => setFormData((current) => ({ ...current, [collection]: [...current[collection], collection === "emailAddresses" ? newEmail() : newPhone()] }));
-  const removeItem = (collection, index) => {
-    setFormData((current) => ({ ...current, [collection]: current[collection].filter((_, itemIndex) => itemIndex !== index) }));
-    const prefix = collection === "emailAddresses" ? "email" : "phone";
-    setErrors((current) => Object.fromEntries(Object.entries(current).flatMap(([key, value]) => {
-      const match = key.match(new RegExp(`^(${prefix}(?:-label)?)-(\\d+)$`));
-      if (!match) return [[key, value]];
-      const errorIndex = Number(match[2]);
-      if (errorIndex === index) return [];
-      return [[errorIndex > index ? `${match[1]}-${errorIndex - 1}` : key, value]];
-    })));
-  };
+  const removeItem = (collection, index) => setFormData((current) => ({ ...current, [collection]: current[collection].filter((_, itemIndex) => itemIndex !== index) }));
   const submit = async (event) => {
     event.preventDefault();
     if (isSubmitting || submissionInProgress.current || !validate()) return;

@@ -6,6 +6,9 @@ import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +28,8 @@ import com.contactmanager.backend.service.ContactService;
 @RequestMapping("/api/contacts")
 public class ContactController {
 
+    private static final Logger logger = LoggerFactory.getLogger(ContactController.class);
+
     private final ContactService contactService;
 
     public ContactController(ContactService contactService) {
@@ -34,7 +39,10 @@ public class ContactController {
     @PostMapping
     public Contact createContact(Authentication authentication, @RequestBody Contact contact) {
         contact.setId(null);
-        return contactService.saveContact(principal(authentication).userId(), contact);
+        Long userId = principal(authentication).userId();
+        Contact createdContact = contactService.saveContact(userId, contact);
+        logger.info("Contact created: contactId={}, userId={}", createdContact.getId(), userId);
+        return createdContact;
     }
 
     private static final int DEFAULT_PAGE_SIZE = 9;
@@ -76,9 +84,12 @@ public class ContactController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteContact(Authentication authentication, @PathVariable("id") Long id) {
-        if (!contactService.deleteContact(principal(authentication).userId(), id)) {
+        Long userId = principal(authentication).userId();
+        if (!contactService.deleteContact(userId, id)) {
+            logger.warn("Contact deletion failed because contact was not found: contactId={}, userId={}", id, userId);
             return ResponseEntity.notFound().build();
         }
+        logger.info("Contact deleted: contactId={}, userId={}", id, userId);
         return ResponseEntity.ok("Contact Deleted Successfully");
     }
 
@@ -87,8 +98,14 @@ public class ContactController {
             Authentication authentication,
             @PathVariable("id") Long id,
             @RequestBody Contact contact) {
-        Contact updatedContact = contactService.updateContact(principal(authentication).userId(), id, contact);
-        return updatedContact == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(updatedContact);
+        Long userId = principal(authentication).userId();
+        Contact updatedContact = contactService.updateContact(userId, id, contact);
+        if (updatedContact == null) {
+            logger.warn("Contact update failed because contact was not found: contactId={}, userId={}", id, userId);
+            return ResponseEntity.notFound().build();
+        }
+        logger.info("Contact updated: contactId={}, userId={}", id, userId);
+        return ResponseEntity.ok(updatedContact);
     }
 
     private AuthenticatedUser principal(Authentication authentication) {
