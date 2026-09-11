@@ -11,6 +11,7 @@ import org.springframework.core.annotation.Order;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.InternalAuthenticationServiceException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,6 +29,14 @@ public class AuthenticationExceptionHandler {
     public ResponseEntity<ApiError> handleBadCredentials() {
         logger.warn("Login failed due to invalid credentials");
         return error(HttpStatus.UNAUTHORIZED, "Email/phone number or password is incorrect", Map.of());
+    }
+
+    @ExceptionHandler(InternalAuthenticationServiceException.class)
+    public ResponseEntity<ApiError> handleAuthenticationServiceFailure(
+            InternalAuthenticationServiceException exception) {
+        logger.error("Login failed because the authentication service was unavailable", exception);
+        return error(HttpStatus.SERVICE_UNAVAILABLE,
+                "Authentication is temporarily unavailable. Please try again later.", Map.of());
     }
 
     @ExceptionHandler(InvalidCurrentPasswordException.class)
