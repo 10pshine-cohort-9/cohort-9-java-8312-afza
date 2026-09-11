@@ -1,5 +1,8 @@
--- Run this SQL Server migration before deploying mandatory contact ownership.
--- Escape single quotes in the owner identifier before supplying this sqlcmd variable.
+-- Run this SQL Server rollout migration before deploying owner-scoped contact access.
+-- Supply LegacyContactOwnerIdentifierSqlEscaped with sqlcmd's -v option after
+-- escaping each single quote as two single quotes. See README.md for the safe
+-- invocation. The transaction fails without changing data if that identifier
+-- does not name exactly one user.
 
 SET XACT_ABORT ON;
 BEGIN TRY
@@ -18,6 +21,7 @@ BEGIN TRY
     IF COL_LENGTH(N'contacts', N'owner_id') IS NULL
         ALTER TABLE contacts ADD owner_id bigint NULL;
 
+    -- Compile the backfill only after owner_id exists.
     EXEC sp_executesql
         N'UPDATE contacts SET owner_id = @owner_id WHERE owner_id IS NULL;
 
@@ -33,5 +37,6 @@ END TRY
 BEGIN CATCH
     IF XACT_STATE() <> 0
         ROLLBACK TRANSACTION;
+
     THROW;
 END CATCH;

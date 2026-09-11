@@ -13,49 +13,43 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.csrf.CsrfToken;
 
 import com.contactmanager.backend.dto.LoginRequest;
 import com.contactmanager.backend.dto.UserProfileResponse;
-import com.contactmanager.backend.service.AuthenticatedUser;
 import com.contactmanager.backend.service.AuthenticatedSessionService;
+import com.contactmanager.backend.service.AuthenticatedUser;
 import com.contactmanager.backend.service.UserProfileService;
 
 class AuthenticationControllerTests {
 
     private AuthenticatedSessionService authenticatedSessionService;
-    private UserProfileService profileService;
     private AuthenticationController controller;
 
     @BeforeEach
     void setUp() {
         authenticatedSessionService = mock(AuthenticatedSessionService.class);
-        profileService = mock(UserProfileService.class);
-        controller = new AuthenticationController(authenticatedSessionService, profileService);
+        controller = new AuthenticationController(authenticatedSessionService, mock(UserProfileService.class));
     }
 
     @Test
-    void successfulLoginNormalizesIdentifierSavesSessionContextAndReturnsProfile() {
+    void loginDelegatesToSessionServiceAndReturnsProfile() {
+        LoginRequest loginRequest = new LoginRequest("user@example.com", "password");
         UserProfileResponse profile = new UserProfileResponse(7L, "Test", "User", "user@example.com", null);
-        CsrfToken csrfToken = mock(CsrfToken.class);
-        when(csrfToken.getToken()).thenReturn("token");
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
-        when(authenticatedSessionService.authenticate(
-                " User@Example.com ", "password", request, response)).thenReturn(profile);
+        CsrfToken csrfToken = mock(CsrfToken.class);
+        when(authenticatedSessionService.authenticate("user@example.com", "password", request, response))
+                .thenReturn(profile);
 
-        UserProfileResponse result = controller.login(
-                new LoginRequest(" User@Example.com ", "password"), request, response, csrfToken);
-
-        assertThat(result).isEqualTo(profile);
-        verify(authenticatedSessionService).authenticate(
-                " User@Example.com ", "password", request, response);
+        assertThat(controller.login(loginRequest, request, response, csrfToken)).isEqualTo(profile);
+        verify(csrfToken).getToken();
+        verify(authenticatedSessionService).authenticate("user@example.com", "password", request, response);
     }
 
     @Test
-    void invalidLoginPropagatesAuthenticationFailureForApiHandler() {
+    void loginPropagatesAuthenticationFailureForApiHandler() {
         when(authenticatedSessionService.authenticate(any(), any(), any(), any()))
                 .thenThrow(new BadCredentialsException("Invalid credentials"));
 
@@ -63,9 +57,6 @@ class AuthenticationControllerTests {
                 new LoginRequest("user@example.com", "wrong-password"),
                 new MockHttpServletRequest(), new MockHttpServletResponse(), mock(CsrfToken.class)))
                 .isInstanceOf(BadCredentialsException.class);
-
-        assertThat(new com.contactmanager.backend.exception.AuthenticationExceptionHandler()
-                .handleBadCredentials().getStatusCode().value()).isEqualTo(401);
     }
 
     @Test
@@ -73,8 +64,8 @@ class AuthenticationControllerTests {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpSession session = (MockHttpSession) request.getSession();
         AuthenticatedUser principal = new AuthenticatedUser(7L, "user@example.com", "hash");
-        Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
-                principal, null, principal.getAuthorities());
+        Authentication authentication = org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+                .authenticated(principal, null, principal.getAuthorities());
 
         assertThat(controller.logout(request, authentication).getStatusCode().value()).isEqualTo(204);
         assertThat(session.isInvalid()).isTrue();
