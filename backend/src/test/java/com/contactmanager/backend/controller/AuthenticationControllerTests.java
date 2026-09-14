@@ -1,58 +1,73 @@
 package com.contactmanager.backend.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.dao.TransientDataAccessResourceException;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.InternalAuthenticationServiceException;
-import org.springframework.security.authentication.ProviderManager;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.web.csrf.CsrfToken;
 
 import com.contactmanager.backend.dto.LoginRequest;
-import com.contactmanager.backend.exception.ApiError;
-import com.contactmanager.backend.exception.AuthenticationExceptionHandler;
-import com.contactmanager.backend.service.UserAuthenticationService;
+import com.contactmanager.backend.dto.UserProfileResponse;
+import com.contactmanager.backend.service.AuthenticatedSessionService;
+import com.contactmanager.backend.service.AuthenticatedUser;
 import com.contactmanager.backend.service.UserProfileService;
-
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 
 class AuthenticationControllerTests {
 
+    private AuthenticatedSessionService authenticatedSessionService;
+    private AuthenticationController controller;
+
+    @BeforeEach
+    void setUp() {
+        authenticatedSessionService = mock(AuthenticatedSessionService.class);
+        controller = new AuthenticationController(authenticatedSessionService, mock(UserProfileService.class));
+    }
+
     @Test
-    void loginReturnsServiceUnavailableWhenUserLookupFails() {
-        UserAuthenticationService userAuthenticationService = mock(UserAuthenticationService.class);
-        when(userAuthenticationService.loadUserByUsername("user@example.com"))
-                .thenThrow(new TransientDataAccessResourceException("unavailable"));
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userAuthenticationService);
-        provider.setPasswordEncoder(mock(PasswordEncoder.class));
-        AuthenticationController controller = new AuthenticationController(
-                new ProviderManager(provider),
-                mock(SecurityContextRepository.class),
-                mock(UserProfileService.class));
+    void loginDelegatesToSessionServiceAndReturnsProfile() {
+        LoginRequest loginRequest = new LoginRequest("user@example.com", "password");
+        UserProfileResponse profile = new UserProfileResponse(7L, "Test", "User", "user@example.com", null);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        CsrfToken csrfToken = mock(CsrfToken.class);
+        when(authenticatedSessionService.authenticate("user@example.com", "password", request, response))
+                .thenReturn(profile);
 
-        InternalAuthenticationServiceException exception = assertThrows(
-                InternalAuthenticationServiceException.class,
-                () -> controller.login(
-                        new LoginRequest("user@example.com", "valid-password"),
-                        mock(HttpServletRequest.class),
-                        mock(HttpServletResponse.class),
-                        mock(CsrfToken.class)));
+        assertThat(controller.login(loginRequest, request, response, csrfToken)).isEqualTo(profile);
+        verify(csrfToken).getToken();
+        verify(authenticatedSessionService).authenticate("user@example.com", "password", request, response);
+    }
 
-        ResponseEntity<ApiError> response = new AuthenticationExceptionHandler()
-                .handleAuthenticationServiceFailure(exception);
+    @Test
+    void loginPropagatesAuthenticationFailureForApiHandler() {
+        when(authenticatedSessionService.authenticate(any(), any(), any(), any()))
+                .thenThrow(new BadCredentialsException("Invalid credentials"));
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().message())
-                .isEqualTo("Authentication is temporarily unavailable. Please try again later.");
+        assertThatThrownBy(() -> controller.login(
+                new LoginRequest("user@example.com", "wrong-password"),
+                new MockHttpServletRequest(), new MockHttpServletResponse(), mock(CsrfToken.class)))
+                .isInstanceOf(BadCredentialsException.class);
+    }
+
+    @Test
+    void logoutInvalidatesExistingSessionAndReturnsNoContent() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpSession session = (MockHttpSession) request.getSession();
+        AuthenticatedUser principal = new AuthenticatedUser(7L, "user@example.com", "hash");
+        Authentication authentication = org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+                .authenticated(principal, null, principal.getAuthorities());
+
+        assertThat(controller.logout(request, authentication).getStatusCode().value()).isEqualTo(204);
+        assertThat(session.isInvalid()).isTrue();
     }
 }
