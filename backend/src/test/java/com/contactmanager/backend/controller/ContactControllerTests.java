@@ -47,6 +47,17 @@ class ContactControllerTests {
     }
 
     @Test
+    void emailSortUsesDedicatedOwnerScopedQuery() {
+        Page<Contact> page = Page.empty(PageRequest.of(0, 9));
+        when(contactService.getContactsSortedByEmail(any(), any(), any(), any())).thenReturn(page);
+
+        assertThat(controller.getContacts(authentication, 0, 9, "Ada", "Work", "email"))
+                .isSameAs(page);
+        verify(contactService).getContactsSortedByEmail(
+                7L, "Ada", "Work", PageRequest.of(0, 9));
+    }
+
+    @Test
     void retrievesOwnedContactAndReturnsNotFoundForUnavailableContact() {
         Contact contact = new Contact();
         when(contactService.getContactById(7L, 10L)).thenReturn(contact);

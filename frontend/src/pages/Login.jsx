@@ -29,8 +29,17 @@ function Login({ onLogin, onRegister }) {
       const { data } = await login({ identifier: form.identifier.trim(), password: form.password });
       onLogin(data);
     } catch (error) {
-      if (error.response?.status === 400 && error.response.data?.errors) setErrors(error.response.data.errors);
-      setMessage(error.response?.status === 401 ? "Email/phone number or password is incorrect" : "Login is unavailable. Please try again.");
+      const response = error.response;
+      if (response?.status === 400 && response.data?.errors) {
+        setErrors(response.data.errors);
+        setMessage(response.data.message || "Please correct the highlighted fields");
+      } else {
+        setMessage(
+          response?.status === 401
+            ? "Email/phone number or password is incorrect"
+            : "Login is unavailable. Please try again.",
+        );
+      }
     } finally {
       requestInProgress.current = false;
       setSubmitting(false);
